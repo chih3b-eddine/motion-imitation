@@ -115,3 +115,5 @@ if __name__ == "__main__":
     with open(path_to_data, "r") as f:
         data = json.loads(f.read())
     env = RLEnv(initial_state=data["frames"][0])
+    while True:
+        1
