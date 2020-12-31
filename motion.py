@@ -1,85 +1,92 @@
 import os
 import joblib
+import json
 import numpy as np
-from collections import OrderedDict
-from motion_utils import aa_to_angle, aa_to_quat, compute_rotations, BULLET_SMPL_MAP, JOINT_3D_MAP
-
-FRAME_LENGTH = 1/30
-input_file = "vibe_output.pkl"
+from motion_utils import  convert_position, process_pose
 
 
-# load VIBE tracking results
-if not os.path.isfile(input_file):
-        exit(f'vibe output file \"{input_file}\" does not exist!')
+FPS_VIBE = 30  # frames per second in VIBE
+BULLET_GRAVITY =  np.array([0,0,-9.81])
 
-data = joblib.load(input_file)
-if data is None:
-    exit(f'cannot load\"{input_file}"!')
+JOINT_3D_MAP = {
+    "root"   : 39, # hip
+    "l_hand" : 36, # lwrist  
+    "r_hand" : 31, # rwrit
+    "l_foot" : 30, # lankle
+    "r_foot" : 25  # rankle 
+}
 
-    
-# convert SMPL to Bullet 
-motion = []
-t_prev = 1
-s_prev = [0]*13
-a_prev = [0]*21
-for person_id, person_data in data.items():
-    
-    poses = person_data['pose']               # Nx72 = Nx24x3
-    orig_cam = person_data['orig_cam']        # in original image space Nx4 : (sx,sy,tx,ty)
-    joints3ds = person_data['joints3d']        # Nx24x3 SMPL 3D joints  
+def process_poses(data, person_id=1):
+    person_data = data[person_id]
+
     frames = person_data['frame_ids']
-   
-    for i in range(len(poses)):
-        t = frames[i]
-
+    joints3ds = person_data['joints3d']       # Nx24x3 SMPL 3D joints  
+    poses = person_data['pose']               # Nx72 = Nx24x3
+    
+    motion = []
+    for i in range(len(poses)):        
+        frame_id = frames[i]
         joints3d = joints3ds[i].reshape(-1,3)
         pose = poses[i].reshape(-1,3)
         
         # get positions
-        root_pos   = joints3d[JOINT_3D_MAP["root"]]
-        l_hand_pos = joints3d[JOINT_3D_MAP["l_hand"]]
-        r_hand_pos = joints3d[JOINT_3D_MAP["r_hand"]]
-        l_foot_pos = joints3d[JOINT_3D_MAP["l_foot"]]
-        r_foot_pos = joints3d[JOINT_3D_MAP["r_foot"]]
+        root_pos   = convert_position(joints3d[JOINT_3D_MAP["root"]]) + BULLET_GRAVITY
+        l_hand_pos = convert_position(joints3d[JOINT_3D_MAP["l_hand"]])
+        r_hand_pos = convert_position(joints3d[JOINT_3D_MAP["r_hand"]])
+        l_foot_pos = convert_position(joints3d[JOINT_3D_MAP["l_foot"]])
+        r_foot_pos = convert_position(joints3d[JOINT_3D_MAP["r_foot"]])
         
-        # get angles and velocities
-        root_ori, joints_a, joints_s = compute_rotations(pose) 
+        # get orientations
+        root_orientation, joints_a = process_pose(pose)
         
-        if (t==1):
-            s_prev = joints_s 
-            a_prev = joints_a
-            
-        joints_angular_v = np.subtract(joints_s, s_prev)  # joints angular velocities  #13
-        joints_v = np.subtract(joints_a, a_prev)          # joints linear velocities   #21
+        if (i==0):
+            root_origin = root_orientation
         
-        s_prev = joints_s
-        a_prev = joints_v
+        # compute root orientation
+        root_orientation = np.subtract(root_orientation, root_origin) # + BULLET_GRAVITY orientation
         
-        output_dict = OrderedDict({
-            "frame_id"          : (t-t_prev)*FRAME_LENGTH,  # seconds
-            "jointsAngles"      : joints_a,     # (21,) in radians
-            "jointsVelocities"  : joints_v,     # (21,)  finite difference 
-            "rootPosition"      : root_pos,     # (x,y,z) real world 
-            "rootOrientation"   : root_ori,     # (a,b,c,d) quat real world 
-            "leftHandPosition"  : l_hand_pos,   # (x,y,z) real world 
-            "rightHandPosition" : r_hand_pos,   # (x,y,z) real world
-            "leftFootPosition"  : l_foot_pos,   # (x,y,z) real world
-            "rightFootPosition" : r_hand_pos,   # (x,y,z) real world
-})
-        t_prev = t
-        motion.append(output_dict)
-  
-    
-# save motion
-with open("bullet_motion.pkl", "wb") as f:
-    joblib.dump(motion, f)
+        # compute velocities
+        if (i==0):
+            velocities = [[0] for k in joints_a]
+        else:
+            delta_t = (frame_id - frame_id_prev)/FPS_VIBE
+            a_c = [k[0] for k in joints_a]
+            velocities = np.subtract(a_c, a_prev)/delta_t
+            velocities = [[k] for k in velocities]
+        
+        # keep track of current orientations for next pose velocities
+        a_prev = [k[0] for k in joints_a]
+        frame_id_prev = frame_id
+        
+        motion.append({
+            "frame_id"          : frame_id,  
+            "jointsAngles"      : joints_a,     
+            "jointsVelocities"  : velocities,     
+            "rootPosition"      : list(root_pos),     
+            "rootOrientation"   : root_orientation,    
+            "leftHandPosition"  : list(l_hand_pos),   
+            "rightHandPosition" : list(r_hand_pos),   
+            "leftFootPosition"  : list(l_foot_pos),   
+            "rightFootPosition" : list(r_hand_pos),   
+        })
+    return {"timestep": 1/FPS_VIBE, "frames": motion}
 
-    
-# ------------------------------------------
-#import joblib
-#data = joblib.load("bullet_motion.pkl")
-#print(len(data))       : 5504
-#for k, v in data[0].items():
-#    if (k != "frame_id"):
-#        print(k, len(v))  
 
+
+if __name__ == "__main__":
+    input_file = "vibe_output.pkl"
+    if not os.path.isfile(input_file):
+        exit(f'vibe output file \"{input_file}\" does not exist!')
+    
+    data = joblib.load(input_file)
+    if data is None:
+        exit(f'cannot load\"{input_file}"!')
+        
+    result = process_poses(data, 1)
+    
+    def np_encoder(object):
+        if isinstance(object, np.generic):
+            return object.item()
+        
+    with open('data.json', 'w') as f:
+        json.dump(result, f, indent=4, default=np_encoder)
