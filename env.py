@@ -2,6 +2,7 @@ import pybullet
 import time
 import pybullet_data
 import numpy as np
+import json
 
 class RLEnv:
     def __init__(self, initial_state=None, useGUI=True, timeStep=1/30):
@@ -110,4 +111,7 @@ class RLEnv:
 
 
 if __name__ == "__main__":
-    env = RLEnv()
+    path_to_data = "data.json"
+    with open(path_to_data, "r") as f:
+        data = json.loads(f.read())
+    env = RLEnv(initial_state=data["frames"][0])
