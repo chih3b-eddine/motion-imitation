@@ -1,10 +1,10 @@
 import pybullet
 import time
 import pybullet_data
+import numpy as np
 
 class RLEnv:
     def __init__(self, initial_state=None, useGUI=True, timeStep=1/30):
-
         self.useGUI = useGUI
         if self.useGUI:
             pybullet.connect(pybullet.GUI)
@@ -17,6 +17,7 @@ class RLEnv:
         self.humanoid = None
         self.jointIds = None
         self.jointNames = None
+        self.terminalLinksIds = [27, 32, 13, 22] ## right hand, left hand, right foot, left foot
         self.reset(initial_state)
         return
 
@@ -38,7 +39,7 @@ class RLEnv:
 
         if initial_state:
             pybullet.resetBasePositionAndOrientation(self.humanoid, initial_state["rootPosition"], initial_state["rootOrientation"])
-            pybullet.resetJointStateMultiDof(self.humanoid, self.jointIds, initial_state["jointsAngles"], initial_state["jointsVelocities"])
+            pybullet.resetJointStatesMultiDof(self.humanoid, self.jointIds, initial_state["jointsAngles"], initial_state["jointsVelocities"])
             return initial_state
         else:
             return self.get_state()
@@ -52,30 +53,60 @@ class RLEnv:
         next_state = self.get_state()
         reward = self.compute_reward(next_state, reference_motion)
         return next_state, reward
-        
-    def compute_reward(self, state, reference_motion):
-        #TODO
-        return 1
 
     def get_state(self):
         jointStates = pybullet.getJointStates(self.humanoid, self.jointIds)
         rootPosition, rootOrientation = pybullet.getBasePositionAndOrientation(self.humanoid)
+        rightHandPosition, _, _, _, _, _ = pybullet.getLinkState(self.humanoid, self.terminalLinksIds[0])
+        leftHandPosition, _, _, _, _, _ = pybullet.getLinkState(self.humanoid, self.terminalLinksIds[1])
+        rightFootPosition, _, _, _, _, _ = pybullet.getLinkState(self.humanoid, self.terminalLinksIds[2])
+        leftFootPosition, _, _, _, _, _ = pybullet.getLinkState(self.humanoid, self.terminalLinksIds[3])
         state = {
-            "isTerminal" : False, #TODO check body positions
+            "isTerminal" : rootPosition[2]<0.4,
             "jointsAngles": [], 
             "jointsVelocities": [],
             "rootPosition": rootPosition,
             "rootOrientation" : rootOrientation,
-            "leftHandPosition" : (0,0,0), #TODO use (x, y, z), (a, b, c, d), _, _, _, _ = self._p.getLinkState(body_id, link_id)
-            "rightHandPosition" : (0,0,0), #TODO
-            "leftFootPosition" : (0,0,0), #TODO
-            "rightFootPosition" : (0,0,0), #TODO
+            "leftHandPosition" : leftHandPosition,
+            "rightHandPosition" : rightHandPosition,
+            "leftFootPosition" : leftFootPosition,
+            "rightFootPosition" : rightFootPosition,
         }
         for s in jointStates:
-            state["jointsAngles"].append(s[0])
-            state["jointsVelocities"].append(s[1])
+            state["jointsAngles"].append([s[0]])
+            state["jointsVelocities"].append([s[1]])
 
         return state  
+
+    def compute_reward(self, state, reference_motion):
+        w_p = 0.65
+        w_v = 0.1
+        w_e = 0.15
+        w_c = 0.1
+
+        scale_p = 2
+        scale_v = 0.1
+        scale_e = 40
+        scale_c = 10
+
+        postions = np.array(state["jointsAngles"])
+        ref_postions = np.array(reference_motion["jointsAngles"])
+        r_p = w_p*np.exp(-scale_p*np.sum((postions - ref_postions)**2))
+
+        velocities = np.array(state["jointsVelocities"])
+        ref_velocities = np.array(reference_motion["jointsVelocities"])
+        r_v = w_v*np.exp(-scale_v*np.sum((velocities - ref_velocities)**2))
+
+        error_e = np.sum((np.array(state["leftHandPosition"]) - np.array(reference_motion["leftHandPosition"]))**2)
+        error_e += np.sum((np.array(state["rightHandPosition"]) - np.array(reference_motion["rightHandPosition"]))**2)
+        error_e += np.sum((np.array(state["leftFootPosition"]) - np.array(reference_motion["leftFootPosition"]))**2)
+        error_e += np.sum((np.array(state["rightFootPosition"]) - np.array(reference_motion["rightFootPosition"]))**2)
+        r_e = w_e*np.exp(-scale_e*error_e)
+
+        error_c = np.sum((np.array(state["rootPosition"]) - np.array(reference_motion["rootPosition"]))**2)
+        r_c = w_c*np.exp(-scale_c*error_c)
+
+        return r_p + r_v + r_e + r_c 
 
 
 if __name__ == "__main__":
