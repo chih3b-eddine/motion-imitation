@@ -45,8 +45,11 @@ class RLEnv:
         else:
             return self.get_state()
 
-    def n_actions(self):
+    def dim_action(self):
         return len(self.jointIds)
+
+    def dim_state(self):
+        return 2*len(self.jointIds) + 3*5 + 4
 
     def step(self, action, reference_motion):
         pybullet.setJointMotorControlArray(self.humanoid, self.jointIds, pybullet.POSITION_CONTROL, action)
@@ -115,3 +118,5 @@ if __name__ == "__main__":
     with open(path_to_data, "r") as f:
         data = json.loads(f.read())
     env = RLEnv(initial_state=data["frames"][0])
+    while True:
+        1
