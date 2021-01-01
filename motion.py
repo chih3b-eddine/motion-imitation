@@ -2,72 +2,69 @@ import os
 import joblib
 import json
 import numpy as np
-from motion_utils import  convert_position, process_pose
+from motion_utils import  convert_position, process_pose, compute_positions
 
 
 FPS_VIBE = 30  # frames per second in VIBE
-BULLET_GRAVITY =  np.array([0,0,-9.81])
 
-JOINT_3D_MAP = {
-    "root"   : 39, # hip
-    "l_hand" : 36, # lwrist  
-    "r_hand" : 31, # rwrit
-    "l_foot" : 30, # lankle
-    "r_foot" : 25  # rankle 
-}
+# Target parameters
+PELVIS_POSITION = np.array([0, 0, -0.165])        
+PELVIS_ORIENTATION = [1.000, 0, -0.002, 0]
+
+
+positions_name_ordered = ['root', 'l_hand', 'r_hand', 'l_foot', 'r_foot']
+positions_ids_ordered = [0,   # pelvis
+                         36,  # lwrist
+                         31,  # rwrist
+                         21,  # OP LHeel    30, # lankle
+                         24]  # OP RHeel    25  # rankle
+
 
 def process_poses(data, person_id=1):
     person_data = data[person_id]
 
-    frames = person_data['frame_ids']
+    frames   = person_data['frame_ids']
     joints3ds = person_data['joints3d']       # Nx24x3 SMPL 3D joints  
-    poses = person_data['pose']               # Nx72 = Nx24x3
+    
+    poses = person_data['pose']               # Nx72 : 72= 3 global orientation parameters + 23 joints orientation    
+    
+    trans = np.asarray([list(p[0]) for p in joints3ds])  # root positions along the frames
+    offset = np.array([trans[0][0], trans[0][1], trans[0][1]])
+    
     
     motion = []
-    for i in range(len(poses)):        
-        frame_id = frames[i]
-        joints3d = joints3ds[i].reshape(-1,3)
-        pose = poses[i].reshape(-1,3)
+    for i in range(len(poses)):
+        print('Adding pose: ' + str(i))
+        frame = frames[i]
         
-        # get positions
-        root_pos   = convert_position(joints3d[JOINT_3D_MAP["root"]]) + BULLET_GRAVITY
-        l_hand_pos = convert_position(joints3d[JOINT_3D_MAP["l_hand"]])
-        r_hand_pos = convert_position(joints3d[JOINT_3D_MAP["r_hand"]])
-        l_foot_pos = convert_position(joints3d[JOINT_3D_MAP["l_foot"]])
-        r_foot_pos = convert_position(joints3d[JOINT_3D_MAP["r_foot"]])
+        # compute orientations
+        root_orientation, angles = process_pose(poses[i])
         
-        # get orientations
-        root_orientation, joints_a = process_pose(pose)
-        
-        if (i==0):
-            root_origin = root_orientation
-        
-        # compute root orientation
-        root_orientation = np.subtract(root_orientation, root_origin) # + BULLET_GRAVITY orientation
-        
+        # compute positions 
+        positions = compute_positions(joints3ds[i], trans[i], offset, PELVIS_POSITION)
+
         # compute velocities
-        if (i==0):
-            velocities = [[0] for k in joints_a]
+        if (i==0): 
+            velocities = [[0] for v in angles]
         else:
-            delta_t = (frame_id - frame_id_prev)/FPS_VIBE
-            a_c = [k[0] for k in joints_a]
-            velocities = np.subtract(a_c, a_prev)/delta_t
-            velocities = [[k] for k in velocities]
+            duration = (frame - previous_frame)/FPS_VIBE
+            velocities = (np.hstack(angles) - np.hstack(previous_angles))/duration
+            velocities = [[v] for v in velocities]
         
-        # keep track of current orientations for next pose velocities
-        a_prev = [k[0] for k in joints_a]
-        frame_id_prev = frame_id
-        
+        previous_frame = frame
+        previous_angles = angles
+              
+  
         motion.append({
-            "frame_id"          : frame_id,  
-            "jointsAngles"      : joints_a,     
+            "frame_id"          : frame,  
+            "jointsAngles"      : angles,     
             "jointsVelocities"  : velocities,     
-            "rootPosition"      : list(root_pos),     
+            "rootPosition"      : positions[0],    
             "rootOrientation"   : root_orientation,    
-            "leftHandPosition"  : list(l_hand_pos),   
-            "rightHandPosition" : list(r_hand_pos),   
-            "leftFootPosition"  : list(l_foot_pos),   
-            "rightFootPosition" : list(r_hand_pos),   
+            "leftHandPosition"  : positions[1],   
+            "rightHandPosition" : positions[2],   
+            "leftFootPosition"  : positions[3],   
+            "rightFootPosition" : positions[4],   
         })
     return {"timestep": 1/FPS_VIBE, "frames": motion}
 
