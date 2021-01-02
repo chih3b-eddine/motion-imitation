@@ -2,46 +2,38 @@ import os
 import joblib
 import json
 import numpy as np
-from motion_utils import  convert_position, process_pose, compute_positions
+from motion_utils import compute_orientations, compute_positions
 
 
-FPS_VIBE = 30  # frames per second in VIBE
+data_folder = "data"
+input_file = "cartwheel_vibe_output.pkl"
 
-# Target parameters
+# VIBE parameters
+FPS_VIBE = 30  # frames per second 
+
+# BULLET parameters
 PELVIS_POSITION = np.array([0, 0, -0.165])        
 PELVIS_ORIENTATION = [1.000, 0, -0.002, 0]
 
 
-positions_name_ordered = ['root', 'l_hand', 'r_hand', 'l_foot', 'r_foot']
-positions_ids_ordered = [0,   # pelvis
-                         36,  # lwrist
-                         31,  # rwrist
-                         21,  # OP LHeel    30, # lankle
-                         24]  # OP RHeel    25  # rankle
-
-
 def process_poses(data, person_id=1):
+    print("Processing frames of person %d ..."%person_id)
+    
     person_data = data[person_id]
-
     frames   = person_data['frame_ids']
-    joints3ds = person_data['joints3d']       # Nx24x3 SMPL 3D joints  
-    
-    poses = person_data['pose']               # Nx72 : 72= 3 global orientation parameters + 23 joints orientation    
-    
-    trans = np.asarray([list(p[0]) for p in joints3ds])  # root positions along the frames
-    offset = np.array([trans[0][0], trans[0][1], trans[0][1]])
-    
-    
+    joints3ds = person_data['joints3d']       # (n_frames, 49, 3) SMPL 3D joints   
+    poses = person_data['pose']               # (n_frames, 72) SMPL poses  72 = (1 root+ 23 joints) orientation parameters     
+     
     motion = []
     for i in range(len(poses)):
-        print('Adding pose: ' + str(i))
+        if (i%50==0): print(" %d frames processed"%i)
         frame = frames[i]
         
         # compute orientations
-        root_orientation, angles = process_pose(poses[i])
+        root_orientation, angles = compute_orientations(poses[i])
         
         # compute positions 
-        positions = compute_positions(joints3ds[i], trans[i], offset, PELVIS_POSITION)
+        positions = compute_positions(joints3ds[i], PELVIS_POSITION)
 
         # compute velocities
         if (i==0): 
@@ -66,24 +58,48 @@ def process_poses(data, person_id=1):
             "leftFootPosition"  : positions[3],   
             "rightFootPosition" : positions[4],   
         })
-    return {"timestep": 1/FPS_VIBE, "frames": motion}
-
-
-
-if __name__ == "__main__":
-    input_file = "vibe_output.pkl"
-    if not os.path.isfile(input_file):
-        exit(f'vibe output file \"{input_file}\" does not exist!')
+    print(" %d Total frames processed"%i)
     
-    data = joblib.load(input_file)
-    if data is None:
-        exit(f'cannot load\"{input_file}"!')
-        
-    result = process_poses(data, 1)
+    result = {
+        "timestep": 1/FPS_VIBE, 
+        "frames": motion
+    }
+    if result is None:
+        exit("Failed to process frames")
+    return result
+
+
+def save_data(result, input_file):
+    output_path = os.path.join(data_folder, os.path.basename(input_file).replace('_vibe_output.pkl', '.json'))
     
     def np_encoder(object):
         if isinstance(object, np.generic):
             return object.item()
-        
-    with open('data.json', 'w') as f:
+    
+    with open(output_path, 'w') as f:
         json.dump(result, f, indent=4, default=np_encoder)
+    print(f'Data saved succesfully to \"{output_path}\"')
+
+    
+def load_data(input_file):
+    input_path = os.path.join(data_folder, input_file)
+    if not os.path.isfile(input_path):
+        exit(f'vibe output file \"{input_path}\" does not exist!') 
+        
+    data = joblib.load(input_path)
+    if data is None:
+        exit(f'cannot load\"{input_path}"!')
+    print(f'Data loaded successfully from \"{input_path}\"')  
+    return data
+
+
+if __name__ == "__main__":
+    # load data
+    data = load_data(input_file)
+    
+    # process data
+    result = process_poses(data, 1)
+    
+    # save data
+    save_data(result, input_file)
+   
