@@ -91,7 +91,7 @@ def PPO(advantages_GAE, log_probs, values_TD, states, actions, minibatch_size=32
     for _ in range(n_updates):
         rand_ids = np.random.randint(0, len(states), minibatch_size)
         A_GAE = advantages_GAE[rand_ids,:]
-        lp = log_probs[rand_ids,:]
+        lp = log_probs[rand_ids]
         V_TD = values_TD[rand_ids,:]
         s = states[rand_ids,:]
         a = actions[rand_ids,:]
