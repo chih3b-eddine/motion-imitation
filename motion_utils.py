@@ -9,7 +9,7 @@ bone_names_ordered = ['root', "b'abdomen",
                       "b'left_hip",  "b'left_knee'",  "b'left_ankle",
                       "b'right_shoulder", "b'right_elbow'",
                       "b'left_shoulder", "b'left_elbow'"]
-bone_index_ordered = [0, 3, 
+bone_index_ordered = [9, 3, 
                       2, 5, 8,
                       1, 4, 7,
                       17, 19,
@@ -18,7 +18,7 @@ bone_index_ordered = [0, 3,
 
 # To compute Positions from "VIBE-SMPL Joints3d"
 positions_name_ordered = ['root', 'l_hand', 'r_hand', 'l_foot', 'r_foot']
-positions_ids_ordered = [0,   # pelvis
+positions_ids_ordered = [41,  # spine (H36M)
                          36,  # lwrist
                          31,  # rwrist
                          21,  # OP LHeel    30, # lankle
@@ -92,7 +92,7 @@ def compute_orientations(pose):
     for index in bone_index_ordered:
         aa = pose[index,:]  # joint pose in axis-angles representation
         
-        if index == 0 :              # root  
+        if index == 9 :              # root  
             q = Matrix(Rodrigues(aa)).to_quaternion() # quaternion order =[w, x, y, z]
             #q = (quat_x_90_cw @ quat_z_90_cw) @ q
             root_orientation = [q.x, q.y, q.z, q.w]   # bullet quaternion order = [x, y, z, w]
