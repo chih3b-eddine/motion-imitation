@@ -1,5 +1,8 @@
 pybullet
 numpy
-mathutils
-joblib
-pytorch
+mathutils==2.81.2
+joblib==0.16.0
+pytorch==1.7.0
+youtube-dl
+git+https://github.com/mkocabas/VIBE.git
+
