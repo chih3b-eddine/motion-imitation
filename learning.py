@@ -18,9 +18,29 @@ def GAE(values, rewards, Gamma=0.95, Lambda=0.95):
     return advantages
 
 
-def test():
-    #TODO
-    return 0
+def test(reference_motion, n_episodes=10):
+    frames = reference_motion["frames"]
+    n_frames = len(frames)
+    
+    rewards = []
+    with torch.no_grad(): 
+        for _ in range(n_episodes):
+            state = frames[0]
+            env.reset(state)
+            total_reward = 0
+            for t in range(n_frames):
+                state = state_to_tensor(state)
+                policy = Pmodel(state)
+                value = Vmodel(state)
+                action = policy.sample()
+                next_state, reward = env.step(action.cpu().numpy()[0,:], frames[t])
+                total_reward += reward
+                if next_state["isTerminal"]:
+                    break
+                else:
+                    state = next_state
+            rewards.append(total_reward)
+    return np.mean(rewards)
 
 
 def state_to_tensor(state):
@@ -35,7 +55,7 @@ def state_to_tensor(state):
     return T
 
 
-def train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=300, minibatch_size=32, n_updates=20, epsilon=0.2, test_every=5):
+def train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=300, minibatch_size=32, n_updates=20, epsilon=0.2, test_every=5, test_episodes=10):
     frames = reference_motion["frames"]
     n_frames = len(frames)
     
@@ -82,7 +102,7 @@ def train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=30
         PPO(advantages_GAE, log_probs, values_TD, states, actions, minibatch_size=minibatch_size, n_updates=n_updates, epsilon=epsilon)
         
         if episode % test_every == 0:
-            avg_test_reward = test() #TODO
+            avg_test_reward = test(reference_motion, test_episodes)
             print(f"episode {episode}, avg test reward {avg_test_reward}")
 
 
