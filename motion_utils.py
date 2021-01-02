@@ -1,5 +1,4 @@
 import numpy as np
-import quaternion
 from math import radians
 from mathutils import Matrix, Vector, Quaternion
 
