@@ -18,7 +18,7 @@ bone_index_ordered = [9, 3,
 
 # To compute Positions from "VIBE-SMPL Joints3d"
 positions_name_ordered = ['root', 'l_hand', 'r_hand', 'l_foot', 'r_foot']
-positions_ids_ordered = [41,  # spine (H36M)
+positions_ids_ordered = [40,  # thorax
                          36,  # lwrist
                          31,  # rwrist
                          21,  # OP LHeel    30, # lankle
