@@ -2,24 +2,8 @@ import numpy as np
 from math import radians
 from mathutils import Matrix, Vector, Quaternion
 
-bone_name_from_index = {
-    0 : 'root',  # global body rotation
-    9 : 'Spine2',     # chest
-    1 : 'L_Hip',
-    2 : 'R_Hip',
-    3 : 'Spine1',     # abdomen
-    4 : 'L_Knee',
-    5 : 'R_Knee',
-    7 : 'L_Ankle',
-    8 : 'R_Ankle',
-    13: 'L_Collar',   
-    14: 'R_Collar',   
-    16: 'L_Shoulder',
-    17: 'R_Shoulder',
-    18: 'L_Elbow',
-    19: 'R_Elbow',
-}
 
+# To compute Orientations from "VIBE-SMPL Poses"
 bone_names_ordered = ['root', "b'abdomen", 
                       "b'right_hip", "b'right_knee'", "b'right_ankle",
                       "b'left_hip",  "b'left_knee'",  "b'left_ankle",
@@ -31,6 +15,8 @@ bone_index_ordered = [0, 3,
                       17, 19,
                       16, 18]
 
+
+# To compute Positions from "VIBE-SMPL Joints3d"
 positions_name_ordered = ['root', 'l_hand', 'r_hand', 'l_foot', 'r_foot']
 positions_ids_ordered = [0,   # pelvis
                          36,  # lwrist
@@ -39,19 +25,9 @@ positions_ids_ordered = [0,   # pelvis
                          24]  # OP RHeel    25  # rankle
 
 
-def convert_position(pos):
-    """
-        switch axis (x, y, z) -> (y, z, x)
-    """
-    x, y, z = pos
-    return np.asarray([y, z, x])
 
-
+# Computes rotation matrix through Rodrigues formula as in cv2.Rodrigues, Source: smpl/plugins/blender/corrective_bpy_sh.py
 def Rodrigues(rotvec):
-    """
-            Computes rotation matrix through Rodrigues formula as in cv2.Rodrigues
-            Source: smpl/plugins/blender/corrective_bpy_sh.py
-    """
     theta = np.linalg.norm(rotvec)
     r = (rotvec/theta).reshape(3, 1) if theta > 0. else rotvec
     cost = np.cos(theta)
@@ -60,95 +36,91 @@ def Rodrigues(rotvec):
                       [-r[1], r[0], 0]])
     return(cost*np.eye(3) + (1-cost)*r.dot(r.T) + np.sin(theta)*mat)
 
-  
+
+
+# Computes the angle of a rotation vector (axis-angle representation)
 def aa_to_angle(aa):
-    """
-            Computes the angle of a rotation vector
-    """
     return np.linalg.norm(aa)
 
-def q_to_aa(q):
+
+
+# switch axis (x, y, z) -> (y, z, x)
+def convert_position(pos):
+    x, y, z = pos
+    return np.asarray([y, z, x])
+
+
+
+def compute_positions(joints3d, pelvis_position):
     """
-            Computes rotation vector from a quaternion
+        joints3d: (n_frames, 49, 3) SMPL 3D joints position in real world    
+    returns:
+        .. # TODO  / I can't 
     """
-    rotvec = q.to_axis_angle() # get back to axis angle
-    w_x, w_y, w_z, theta = rotvec[0][:], rotvec[1]
-    return w__x*theta, w_y*theta, w_z*theta
-
-
-rotVecDict = {
-            "hip": [0, 0, 0],
-            "hip": [0, 0, 0],
-            "chest": [0, 1, 0],
-            "neck": [0, 1, 0],
-            "right hip": [0, -1, 0],
-            "right knee": [0, 0, 0],
-            "right ankle": [0, 0, 0],
-            "right shoulder": [0, -1, 0],
-            "right elbow": [0, 0, 0],
-            "left hip": [0, -1, 0],
-            "left knee": [0, 0, 0],
-            "left ankle": [0, 0, 0],
-            "left shoulder": [0, -1, 0],
-            "left elbow": [0, 0, 0]
-}
-
-def compute_positions(joints3d, trans, offset, pelvis_position):
-    joints3d = joints3d.reshape(-1,3)
-    trans = convert_position(trans)
     positions = []
     
-    positions.append(list(pelvis_position + trans - offset))
-    for index in positions_ids_ordered[1:]:
-        pos = convert_position(joints3d[index]) 
-        positions.append(list(pos))
+    # set absolute root position to BULLET PELVIS POSITION
+    root_position = convert_position(joints3d[0])
+    positions.append(list(root_position - pelvis_position))   
+    
+    # position of hand and feet
+    for index in positions_ids_ordered[1:]:                     
+        joint_position = convert_position(joints3d[index]) 
+        positions.append(list(joint_position))
     return positions
 
 
-def process_pose(pose):
+
+def compute_orientations(pose):
+    """
+        pose: (n_frames, 72) array in axis-angle format [theta*wx,  theta*wy, theta*wz]
+            pose[:3] : global body rotation (root=pelvis)
+            pose[3:] : relative rotation of 23 joints
+    returns:
+        mapping of VIBE-SMPL body pose to Bullet orientations:
+            - the global orientation is mapped from VIBE coordinate system (XYZ) to Bullet coordinate system (YZX), both expressed as
+              (right,up,out) in right hand system
+            - the joints orientation is already expressed relatively to the root, so no need to transform them        
+    """
     pose = pose.reshape(-1,3)
-    angles = []
     
-    quat_x_90_cw = Quaternion((1.0, 0.0, 0.0), radians(-180))
+    quat_x_90_cw = Quaternion((1.0, 0.0, 0.0), radians(-90))  #  -90° rotation around X 
     quat_z_90_cw = Quaternion((0.0, 0.0, 1.0), radians(-90))
     quat_y_90_cw = Quaternion((0.0, 1.0, 0.0), radians(-90))
-
     
+    angles = []
     for index in bone_index_ordered:
-        aa = pose[index,:]
+        aa = pose[index,:]  # joint pose in axis-angles representation
         
-        if index == 0 :              # root  z, x, y --> x, y, z
-            q = Matrix(Rodrigues(aa)).to_quaternion()
-            #q = quat_x_90_cw @ q
-            #q = quat_y_90_cw @ q
+        if index == 0 :              # root  
+            q = Matrix(Rodrigues(aa)).to_quaternion() # quaternion order =[w, x, y, z]
             #q = (quat_x_90_cw @ quat_z_90_cw) @ q
-            root_orientation = [q.x, -q.y, -q.z, q.w]
+            root_orientation = [q.x, q.y, q.z, q.w]   # bullet quaternion order = [x, y, z, w]
         
-        elif index == 3:             # abdomen  z, y, x --> x, y, -z  ( +90 rotation around y) /// 1, 0, 2 --> 2 0 -1
+        elif index == 3:             # abdomen /// bullet (z, y, x) --> Vibe (y, x, z) = (1, 0, 2)
             angles.append([aa[1]])
             angles.append([aa[0]])
             angles.append([aa[2]])
 
-        elif index == 2:             # r-hip  x, z, y --> -y, z, x ( -90 rotation around z)  /// 2 1 0 --> -0 1 2
+        elif index == 2:             # r-hip /// bullet (x, z, y) --> Vibe (z, y, x) = (2, 1, 0) 
             angles.append([aa[2]])
             angles.append([aa[1]])
             angles.append([aa[0]])
             
-        elif index == 1:             # l-hip  x, z, y --> y, z, -x ( +90 rotation around z)  /// 2 1 0 --> 0 1 -2
+        elif index == 1:             # l-hip /// bullet (x, z, y) --> Vibe (z, y, x) = (2, 1, 0) 
             angles.append([aa[2]])   
             angles.append([aa[1]])
             angles.append([aa[0]])
-        
             
-        elif index == 17:            # r-shoulder  x, y --> x, z    ( +90 rotation around x)  /// 2 0 --> 2 0
+        elif index == 17:            # r-shoulder /// bullet (x, y) --> Vibe (z, x) = (2, 0) 
             angles.append([aa[2]])
             angles.append([aa[0]])    
             
-        elif index == 16:            # l-shoulder  x, y --> x, -z  ( -90 rotation around x)  /// 2 0 --> 2 -0
+        elif index == 16:            # l-shoulder /// bullet (x, y) --> Vibe (z, x) = (2, 0) 
             angles.append([aa[2]])
             angles.append([aa[0]])
             
-        elif index in [8, 7]:        # ankles
+        elif index in [8, 7]:        # ankles   /// bullet (y, x) --> Vibe (x, z) = (0, 2)
             angles.append([aa[0]])
             angles.append([aa[2]])
             
