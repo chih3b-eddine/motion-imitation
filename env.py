@@ -66,15 +66,15 @@ class RLEnv:
         rightFootPosition, _, _, _, _, _ = pybullet.getLinkState(self.humanoid, self.terminalLinksIds[2])
         leftFootPosition, _, _, _, _, _ = pybullet.getLinkState(self.humanoid, self.terminalLinksIds[3])
         state = {
-            "isTerminal" : rootPosition[2]<0.4,
+            "isTerminal" : rootPosition[2]<0.4 or rootPosition[2]>5,
             "jointsAngles": [], 
             "jointsVelocities": [],
-            "rootPosition": rootPosition,
-            "rootOrientation" : rootOrientation,
-            "leftHandPosition" : leftHandPosition,
-            "rightHandPosition" : rightHandPosition,
-            "leftFootPosition" : leftFootPosition,
-            "rightFootPosition" : rightFootPosition,
+            "rootPosition": list(rootPosition),
+            "rootOrientation" : list(rootOrientation),
+            "leftHandPosition" : list(leftHandPosition),
+            "rightHandPosition" : list(rightHandPosition),
+            "leftFootPosition" : list(leftFootPosition),
+            "rightFootPosition" : list(rightFootPosition),
         }
         for s in jointStates:
             state["jointsAngles"].append([s[0]])
