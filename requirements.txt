@@ -1,0 +1,6 @@
+pybullet
+numpy==1.19.3
+numpy-quaternion
+mathutils
+joblib
+pytorch
