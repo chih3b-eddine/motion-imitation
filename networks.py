@@ -4,7 +4,7 @@ import torch
 
 
 class PNet(nn.Module):
-    def __init__(self, dim_state, dim_action, scale=1):
+    def __init__(self, dim_state, dim_action, scale=0.01):
         super(PNet, self).__init__()
          
         self.policy_mean = nn.Sequential(
