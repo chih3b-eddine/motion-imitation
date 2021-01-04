@@ -136,8 +136,12 @@ def PPO(advantages_GAE, log_probs, values_TD, states, actions, minibatch_size=32
 
 
 if __name__ == "__main__":
-    path_to_data = "data.json"
-    env = RLEnv()
+    path_to_data = "data/walking.json"
+
+    with open(path_to_data, "r") as f:
+        reference_motion = json.loads(f.read())
+
+    env = RLEnv(useGUI=True, timeStep=reference_motion["timestep"])
     dim_state = env.dim_state()
     dim_action = env.dim_action()
 
@@ -151,10 +155,5 @@ if __name__ == "__main__":
     Vmodel = VNet(dim_state).to(device)
     Voptimizer = optim.Adam(Vmodel.parameters(), lr=0.01)
 
-    with open(path_to_data, "r") as f:
-        reference_motion = json.loads(f.read())
-
     train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=300,
              minibatch_size=32, n_updates=20, epsilon=0.2, test_every=5)
-
-    
