@@ -55,39 +55,40 @@ def state_to_tensor(state):
     return T
 
 
-def train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=300, minibatch_size=32, n_updates=20, epsilon=0.2, test_every=5, test_episodes=10):
+def train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=500, minibatch_size=256, update_every=4096, n_updates=20, epsilon=0.2, test_every=5, test_episodes=10):
     frames = reference_motion["frames"]
     n_frames = len(frames)
-    
+
     for episode in range(n_episodes):
         log_probs = []
         values = []
         states = []
         actions = []
         rewards = []
-        t0 = random.choice(range(n_frames//2))
-        state = frames[t0]
-        env.reset(state)
-        for t in range(t0, min(t0 + n_steps, n_frames)):
-            state = state_to_tensor(state)
-            
-            policy = Pmodel(state)
-            value = Vmodel(state)
-            
-            action = policy.sample()
-            next_state, reward = env.step(action.cpu().numpy()[0,:], frames[t])
-            log_prob = policy.log_prob(action)
-            
-            log_probs.append(log_prob)
-            values.append(value)
-            states.append(state)
-            actions.append(action)
-            rewards.append(torch.FloatTensor([reward]).to(device))
-    
-            if next_state["isTerminal"]:
-                break
-            else:
-                state = next_state
+        while len(values) < update_every:
+            t0 = random.choice(range(n_frames//2))
+            state = frames[t0]
+            env.reset(state)
+            for t in range(t0, min(t0 + n_steps, n_frames)):
+                state = state_to_tensor(state)
+                
+                policy = Pmodel(state)
+                value = Vmodel(state)
+                
+                action = policy.sample()
+                next_state, reward = env.step(action.cpu().numpy()[0,:], frames[t])
+                log_prob = policy.log_prob(action)
+                
+                log_probs.append(log_prob)
+                values.append(value)
+                states.append(state)
+                actions.append(action)
+                rewards.append(torch.FloatTensor([reward]).to(device))
+        
+                if next_state["isTerminal"]:
+                    break
+                else:
+                    state = next_state
                 
         advantages_GAE = GAE(values, rewards, Gamma=Gamma, Lambda=Lambda)
         
@@ -107,7 +108,7 @@ def train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=30
 
 
 
-def PPO(advantages_GAE, log_probs, values_TD, states, actions, minibatch_size=32, n_updates=20, epsilon=0.2):
+def PPO(advantages_GAE, log_probs, values_TD, states, actions, minibatch_size=256, n_updates=20, epsilon=0.2):
     for _ in range(n_updates):
         rand_ids = np.random.randint(0, len(states), minibatch_size)
         A_GAE = advantages_GAE[rand_ids,:]
@@ -155,5 +156,5 @@ if __name__ == "__main__":
     Vmodel = VNet(dim_state).to(device)
     Voptimizer = optim.Adam(Vmodel.parameters(), lr=0.01)
 
-    train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=300,
-             minibatch_size=32, n_updates=20, epsilon=0.2, test_every=5)
+    train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=500, minibatch_size=256,
+            update_every=4096, n_updates=20, epsilon=0.2, test_every=5, test_episodes=10)
