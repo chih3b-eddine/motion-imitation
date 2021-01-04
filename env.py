@@ -84,7 +84,7 @@ class RLEnv:
 
     def compute_reward(self, state, reference_motion):
         if state["isTerminal"]:
-            return -10
+            return -1
         w_p = 0.65
         w_v = 0.1
         w_e = 0.15
@@ -112,7 +112,7 @@ class RLEnv:
         error_c = np.sum((np.array(state["rootPosition"]) - np.array(reference_motion["rootPosition"]))**2)
         r_c = w_c*np.exp(-scale_c*error_c)
 
-        return r_p + r_v + r_e + r_c 
+        return r_p + r_v + r_e + r_c + 1
 
 
 if __name__ == "__main__":

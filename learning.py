@@ -158,3 +158,6 @@ if __name__ == "__main__":
 
     train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=500, minibatch_size=256,
             update_every=4096, n_updates=20, epsilon=0.2, test_every=5, test_episodes=10)
+
+    torch.save(Pmodel.state_dict(), "data/policy.pth")
+    torch.save(Vmodel.state_dict(), "data/value_function.pth")
