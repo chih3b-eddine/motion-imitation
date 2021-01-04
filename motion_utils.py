@@ -47,11 +47,11 @@ def aa_to_angle(aa):
 # switch axis (x, y, z) -> (y, z, x)
 def convert_position(pos):
     x, y, z = pos
-    return np.asarray([y, z, x])
+    return np.asarray([x, z, -y])
 
 
 
-def compute_positions(joints3d, pelvis_position):
+def compute_positions(joints3d):
     """
         joints3d: (n_frames, 49, 3) SMPL 3D joints position in real world    
     returns:
@@ -59,14 +59,14 @@ def compute_positions(joints3d, pelvis_position):
     """
     positions = []
     
-    # set absolute root position to BULLET PELVIS POSITION
+    # set absolute root position to ULLET PELVIS POSITION
     root_position = convert_position(joints3d[0])
-    positions.append(list(root_position - pelvis_position))   
     
     # position of hand and feet
-    for index in positions_ids_ordered[1:]:                     
+    for index in positions_ids_ordered:                     
         joint_position = convert_position(joints3d[index]) 
-        positions.append(list(joint_position))
+        positions.append(list(joint_position+root_position+np.array([0,0,-0.3])))
+        
     return positions
 
 
@@ -84,22 +84,24 @@ def compute_orientations(pose):
     """
     pose = pose.reshape(-1,3)
     
-    quat_x_90_cw = Quaternion((1.0, 0.0, 0.0), radians(-90))  #  -90° rotation around X 
-    quat_z_90_cw = Quaternion((0.0, 0.0, 1.0), radians(-90))
-    quat_y_90_cw = Quaternion((0.0, 1.0, 0.0), radians(-90))
+    rotation_y = Quaternion((0.0, 1.0, 0.0), radians(-100))
     
     angles = []
     for index in bone_index_ordered:
         aa = pose[index,:]  # joint pose in axis-angles representation
         
         if index == 9 :              # root  
-            q = Matrix(Rodrigues(aa)).to_quaternion() # quaternion order =[w, x, y, z]
-            #q = (quat_x_90_cw @ quat_z_90_cw) @ q
+            q_root = Matrix(Rodrigues( pose[0,:])).to_quaternion()
+            q_spine = Matrix(Rodrigues( pose[3,:])).to_quaternion()
+            q_spine_1 = Matrix(Rodrigues( pose[6,:])).to_quaternion()
+            q_spine_2 = Matrix(Rodrigues(aa)).to_quaternion() # quaternion order = [w, x, y, z]
+
+            q = rotation_y @ (q_root @ (q_spine @ (q_spine_1 @ q_spine_2)))
             root_orientation = [q.x, q.y, q.z, q.w]   # bullet quaternion order = [x, y, z, w]
-        
+            
         elif index == 3:             # abdomen /// bullet (z, y, x) --> Vibe (y, x, z) = (1, 0, 2)
             angles.append([aa[1]])
-            angles.append([aa[0]])
+            angles.append([-aa[0]])
             angles.append([aa[2]])
 
         elif index == 2:             # r-hip /// bullet (x, z, y) --> Vibe (z, y, x) = (2, 1, 0) 
@@ -113,12 +115,12 @@ def compute_orientations(pose):
             angles.append([aa[0]])
             
         elif index == 17:            # r-shoulder /// bullet (x, y) --> Vibe (z, x) = (2, 0) 
-            angles.append([aa[2]])
-            angles.append([aa[0]])    
+            angles.append([aa[2] - 0.75])
+            angles.append([aa[0] - 0.25])    
             
         elif index == 16:            # l-shoulder /// bullet (x, y) --> Vibe (z, x) = (2, 0) 
-            angles.append([aa[2]])
-            angles.append([aa[0]])
+            angles.append([aa[2] + 0.75])
+            angles.append([aa[0] + 0.25])
             
         elif index in [8, 7]:        # ankles   /// bullet (y, x) --> Vibe (x, z) = (0, 2)
             angles.append([aa[0]])
@@ -130,6 +132,6 @@ def compute_orientations(pose):
             
         elif index in [19, 18]:       # elbows
             theta = aa_to_angle(aa)
-            angles.append([+theta])              
+            angles.append([theta - 1.5])              
         
     return root_orientation, angles

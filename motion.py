@@ -6,14 +6,10 @@ from motion_utils import compute_orientations, compute_positions
 
 
 data_folder = "data"
-input_file = "cartwheel_vibe_output.pkl"
+input_file = "walking_vibe_output.pkl"
 
 # VIBE parameters
-FPS_VIBE = 30  # frames per second 
-
-# BULLET parameters
-PELVIS_POSITION = np.array([0, 0, -0.165])        
-PELVIS_ORIENTATION = [1.000, 0, -0.002, 0]
+FPS_VIBE = 30  # frames per second      
 
 
 def process_poses(data, person_id=1):
@@ -33,7 +29,7 @@ def process_poses(data, person_id=1):
         root_orientation, angles = compute_orientations(poses[i])
         
         # compute positions 
-        positions = compute_positions(joints3ds[i], PELVIS_POSITION)
+        positions = compute_positions(joints3ds[i])
 
         # compute velocities
         if (i==0): 
