@@ -14,7 +14,6 @@ class RLEnv:
         pybullet.setAdditionalSearchPath(pybullet_data.getDataPath())
 
         pybullet.setPhysicsEngineParameter(fixedTimeStep=timeStep, numSubSteps=1)
-        pybullet.setGravity(0,0,-9.81)
         self.humanoid = None
         self.jointIds = None
         self.jointNames = None
@@ -24,6 +23,7 @@ class RLEnv:
 
     def reset(self, initial_state=None):
         pybullet.resetSimulation()
+        pybullet.setGravity(0,0,-9.81)
         obUids = pybullet.loadMJCF("mjcf/humanoid.xml")
         self.humanoid = obUids[1]
         self.jointIds = []
@@ -83,6 +83,8 @@ class RLEnv:
         return state  
 
     def compute_reward(self, state, reference_motion):
+        if state["isTerminal"]:
+            return -10
         w_p = 0.65
         w_v = 0.1
         w_e = 0.15
@@ -114,7 +116,7 @@ class RLEnv:
 
 
 if __name__ == "__main__":
-    path_to_data = "data.json"
+    path_to_data = "data/walking.json"
     with open(path_to_data, "r") as f:
         data = json.loads(f.read())
     env = RLEnv(initial_state=data["frames"][0])
