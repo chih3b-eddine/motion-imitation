@@ -112,7 +112,7 @@ class RLEnv:
         error_c = np.sum((np.array(state["rootPosition"]) - np.array(reference_motion["rootPosition"]))**2)
         r_c = w_c*np.exp(-scale_c*error_c)
 
-        return r_p + r_v + r_e + r_c + 1
+        return r_p + r_v + r_e + r_c
 
 
 if __name__ == "__main__":
