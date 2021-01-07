@@ -3,7 +3,7 @@ import json
 import time
        
 if __name__ == "__main__":
-    path_to_data = "data/walking.json"
+    path_to_data = "data/dance.json"
     
     with open(path_to_data, "r") as f:
         reference_motion = json.loads(f.read())
