@@ -105,6 +105,10 @@ def train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=50
         if episode % test_every == 0:
             avg_test_reward = test(reference_motion, test_episodes)
             print(f"episode {episode}, avg test reward {avg_test_reward}")
+            avg_test_reward = round(avg_test_reward, 2)
+            if avg_test_reward > 1.10:
+                torch.save(Pmodel.state_dict(), f"data/policy_{avg_test_reward}_ep_{episode}.pth")
+                torch.save(Vmodel.state_dict(), f"data/value_function_{avg_test_reward}_ep_{episode}.pth")
 
 
 
@@ -136,8 +140,24 @@ def PPO(advantages_GAE, log_probs, values_TD, states, actions, minibatch_size=25
         Voptimizer.step()
 
 
+def evaluate_policy(policy_path, value_function_path):
+    policy_state_dict = torch.load(policy_path)
+    Pmodel = PNet(dim_state, dim_action, scale=0.01)
+    Pmodel.load_state_dict(policy_state_dict)
+    Pmodel.to(device)
+
+    value_state_dict = torch.load(value_function_path)
+    Vmodel = VNet(dim_state)
+    Vmodel.load_state_dict(policy_state_dict)
+    Vmodel.to(device)
+    # TODO
+    return 
+
+
 if __name__ == "__main__":
     path_to_data = "data/walking.json"
+    policy_path = "data/policy.pth"
+    value_path = "data/value_function.pth"
 
     with open(path_to_data, "r") as f:
         reference_motion = json.loads(f.read())
@@ -150,14 +170,22 @@ if __name__ == "__main__":
     device = torch.device("cuda" if use_cuda else "cpu")
     print(f"running on {device}")
 
-    Pmodel = PNet(dim_state, dim_action, scale=1).to(device)
+    Pmodel = PNet(dim_state, dim_action, scale=0.01) # the scale should be small 
+    if policy_path:
+        policy_state_dict = torch.load(policy_path)
+        Pmodel.load_state_dict(policy_state_dict)
+    Pmodel.to(device)
     Poptimizer = optim.Adam(Pmodel.parameters(), lr=0.001)
 
     Vmodel = VNet(dim_state).to(device)
+    if value_path:
+        value_state_dict = torch.load(value_path)
+        Vmodel.load_state_dict(value_state_dict)
+    Vmodel.to(device)
     Voptimizer = optim.Adam(Vmodel.parameters(), lr=0.01)
 
     train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=500, minibatch_size=256,
             update_every=4096, n_updates=20, epsilon=0.2, test_every=5, test_episodes=10)
 
-    torch.save(Pmodel.state_dict(), "data/policy.pth")
-    torch.save(Vmodel.state_dict(), "data/value_function.pth")
+    torch.save(Pmodel.state_dict(), "data/policy_2.pth")
+    torch.save(Vmodel.state_dict(), "data/value_function_2.pth")
