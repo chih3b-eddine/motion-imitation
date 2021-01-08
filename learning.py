@@ -58,6 +58,7 @@ def state_to_tensor(state):
 def train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=500, minibatch_size=256, update_every=4096, n_updates=20, epsilon=0.2, test_every=5, test_episodes=10):
     frames = reference_motion["frames"]
     n_frames = len(frames)
+    best_reward = 1.10
 
     for episode in range(n_episodes):
         log_probs = []
@@ -106,9 +107,10 @@ def train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=50
             avg_test_reward = test(reference_motion, test_episodes)
             print(f"episode {episode}, avg test reward {avg_test_reward}")
             avg_test_reward = round(avg_test_reward, 2)
-            if avg_test_reward > 1.10:
+            if avg_test_reward > best_reward:
                 torch.save(Pmodel.state_dict(), f"data/policy_{avg_test_reward}_ep_{episode}.pth")
                 torch.save(Vmodel.state_dict(), f"data/value_function_{avg_test_reward}_ep_{episode}.pth")
+                best_reward = avg_test_reward
 
 
 
@@ -156,8 +158,8 @@ def evaluate_policy(policy_path, value_function_path):
 
 if __name__ == "__main__":
     path_to_data = "data/walking.json"
-    policy_path = "data/policy.pth"
-    value_path = "data/value_function.pth"
+    policy_path = None
+    value_path = None
 
     with open(path_to_data, "r") as f:
         reference_motion = json.loads(f.read())
@@ -165,6 +167,8 @@ if __name__ == "__main__":
     env = RLEnv(useGUI=True, timeStep=reference_motion["timestep"])
     dim_state = env.dim_state()
     dim_action = env.dim_action()
+    print(f"dim_action={dim_action}")
+    print(f"dim_state={dim_state}")
 
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
