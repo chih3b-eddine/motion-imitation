@@ -2,6 +2,10 @@ from torch.distributions import MultivariateNormal
 import torch.nn as nn
 import torch
 
+def init_weights(m):
+    if isinstance(m, nn.Linear):
+        nn.init.normal_(m.weight, mean=0., std=0.1)
+        nn.init.constant_(m.bias, 0.1)
 
 class PNet(nn.Module):
     def __init__(self, dim_state, dim_action, scale=0.01):
@@ -16,7 +20,8 @@ class PNet(nn.Module):
         )
         
         self.sigma = scale*torch.eye(dim_action)
-        
+        self.apply(init_weights)
+
     def forward(self, x):
         mu = self.policy_mean(x)
         policy = MultivariateNormal(mu, self.sigma)
@@ -34,6 +39,8 @@ class VNet(nn.Module):
             nn.ReLU(),
             nn.Linear(512, 1)
         )
+
+        self.apply(init_weights)
         
     def forward(self, x):
         value = self.value_function(x)
