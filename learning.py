@@ -1,10 +1,11 @@
 from env import RLEnv
-from networks import PNet, VNet
+from networks import PNet, VNet, StateDist, PhaseDist
 import torch
 import torch.optim as optim
 import json
 import random
 import numpy as np
+import os
 
 
 def GAE(values, rewards, Gamma=0.95, Lambda=0.95):
@@ -18,8 +19,7 @@ def GAE(values, rewards, Gamma=0.95, Lambda=0.95):
     return advantages
 
 
-def test(reference_motion, n_episodes=10):
-    frames = reference_motion["frames"]
+def test(frames, n_episodes=10):
     n_frames = len(frames)
     
     rewards = []
@@ -27,18 +27,20 @@ def test(reference_motion, n_episodes=10):
         for _ in range(n_episodes):
             state = frames[0]
             env.reset(state)
+            state = extend_state(state_to_tensor(state), [0.0])
             total_reward = 0
             for t in range(n_frames):
-                state = state_to_tensor(state)
                 policy = Pmodel(state)
                 value = Vmodel(state)
+                index, _ = stateDist.evaluate_state(state[0][:-1])
+                phase = phase_values[index]
                 action = policy.sample()
-                next_state, reward = env.step(action.cpu().numpy()[0,:], frames[t])
+                next_state, reward = env.step(action.cpu().numpy()[0,:], tensor_to_state(state))
                 total_reward += reward
                 if next_state["isTerminal"]:
                     break
                 else:
-                    state = next_state
+                    state = extend_state(state_to_tensor(next_state), [phase]) 
             rewards.append(total_reward)
     return np.mean(rewards)
 
@@ -55,8 +57,33 @@ def state_to_tensor(state):
     return T
 
 
-def train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=500, minibatch_size=256, update_every=4096, n_updates=20, epsilon=0.2, test_every=5, test_episodes=10):
-    frames = reference_motion["frames"]
+def tensor_to_state(T):
+    state = {
+        "jointsAngles" : [[i] for i in T[0,:21].tolist()],
+        "jointsVelocities" :  [[i] for i in T[0,21:42].tolist()],
+        "rootPosition" : T[:,42:45][0].tolist(),
+        "rootOrientation" : T[:,45:49][0].tolist(),
+        "leftHandPosition" : T[:,49:52][0].tolist(),
+        "rightHandPosition" : T[:,52:55][0].tolist(),
+        "leftFootPosition" : T[:,55:58][0].tolist(),
+        "rightFootPosition" : T[:,58:61][0].tolist()
+    }
+    return state
+
+
+def get_init_weights(frames, positions):
+    X = torch.cat([state_to_tensor(frame) for frame in frames])
+    means = X[positions]
+    sigma = torch.FloatTensor(np.cov(X.T))
+    return means, sigma
+
+
+def extend_state(state, phase):
+    phase = torch.FloatTensor([phase]).to(device)
+    return torch.cat((state, phase), dim=-1)
+
+
+def train(frames, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=500, minibatch_size=256, update_every=4096, n_updates=20, epsilon=0.2, test_every=5, test_episodes=10):
     n_frames = len(frames)
 
     for episode in range(n_episodes):
@@ -65,18 +92,20 @@ def train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=50
         states = []
         actions = []
         rewards = []
+        phases = []
         while len(values) < update_every:
-            t0 = random.choice(range(n_frames//2))
-            state = frames[t0]
-            env.reset(state)
-            for t in range(t0, min(t0 + n_steps, n_frames)):
-                state = state_to_tensor(state)
-                
+            index0, phase0, t0 = phaseDist.sample()
+            state = stateDist.sample(index0).unsqueeze(0)
+            state = extend_state(state, [phase0])
+            env.reset(tensor_to_state(state))
+            for t in range(t0, min(t0 + n_steps, n_frames)):                
                 policy = Pmodel(state)
                 value = Vmodel(state)
+                index, _ = stateDist.evaluate_state(state[0][:-1])
+                phase = phase_values[index]
                 
                 action = policy.sample()
-                next_state, reward = env.step(action.cpu().numpy()[0,:], frames[t])
+                next_state, reward = env.step(action.cpu().numpy()[0,:], tensor_to_state(state))
                 log_prob = policy.log_prob(action)
                 
                 log_probs.append(log_prob)
@@ -84,11 +113,12 @@ def train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=50
                 states.append(state)
                 actions.append(action)
                 rewards.append(torch.FloatTensor([reward]).to(device))
+                phases.append(phase)
         
                 if next_state["isTerminal"]:
                     break
                 else:
-                    state = next_state
+                    state = extend_state(state_to_tensor(next_state), [phase])
                 
         advantages_GAE = GAE(values, rewards, Gamma=Gamma, Lambda=Lambda)
         
@@ -103,7 +133,7 @@ def train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=50
         PPO(advantages_GAE, log_probs, values_TD, states, actions, minibatch_size=minibatch_size, n_updates=n_updates, epsilon=epsilon)
         
         if episode % test_every == 0:
-            avg_test_reward = test(reference_motion, test_episodes)
+            avg_test_reward = test(frames, test_episodes)
             print(f"episode {episode}, avg test reward {avg_test_reward}")
             avg_test_reward = round(avg_test_reward, 2)
             if avg_test_reward > 1.10:
@@ -165,26 +195,33 @@ if __name__ == "__main__":
     env = RLEnv(useGUI=True, timeStep=reference_motion["timestep"])
     dim_state = env.dim_state()
     dim_action = env.dim_action()
+    k = 10
 
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
     print(f"running on {device}")
 
-    Pmodel = PNet(dim_state, dim_action, scale=0.01) # the scale should be small 
-    if policy_path:
+    Pmodel = PNet(dim_state+1, dim_action, scale=0.01) # the scale should be small 
+    if os.path.isfile(policy_path):
         policy_state_dict = torch.load(policy_path)
         Pmodel.load_state_dict(policy_state_dict)
     Pmodel.to(device)
     Poptimizer = optim.Adam(Pmodel.parameters(), lr=0.001)
 
-    Vmodel = VNet(dim_state).to(device)
-    if value_path:
+    Vmodel = VNet(dim_state+1).to(device)
+    if os.path.isfile(value_path):
         value_state_dict = torch.load(value_path)
         Vmodel.load_state_dict(value_state_dict)
     Vmodel.to(device)
     Voptimizer = optim.Adam(Vmodel.parameters(), lr=0.01)
+    
+    frames = reference_motion["frames"]
+    phaseDist = PhaseDist(k)
+    phase_values, positions = phaseDist.fit(len(frames))
+    means, sigma = get_init_weights(frames, positions)
+    stateDist = StateDist(dim_state, k, means, sigma)
 
-    train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=500, minibatch_size=256,
+    train(frames, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=500, minibatch_size=256,
             update_every=4096, n_updates=20, epsilon=0.2, test_every=5, test_episodes=10)
 
     torch.save(Pmodel.state_dict(), "data/policy_2.pth")
