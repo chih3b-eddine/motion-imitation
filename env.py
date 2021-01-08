@@ -13,7 +13,7 @@ class RLEnv:
             pybullet.connect(pybullet.DIRECT)
         pybullet.setAdditionalSearchPath(pybullet_data.getDataPath())
 
-        pybullet.setPhysicsEngineParameter(fixedTimeStep=timeStep, numSubSteps=1)
+        self.timeStep = timeStep
         self.humanoid = None
         self.jointIds = None
         self.jointNames = None
@@ -23,6 +23,7 @@ class RLEnv:
 
     def reset(self, initial_state=None):
         pybullet.resetSimulation()
+        pybullet.setPhysicsEngineParameter(fixedTimeStep=self.timeStep, numSubSteps=2)
         pybullet.setGravity(0,0,-9.81)
         obUids = pybullet.loadMJCF("mjcf/humanoid.xml")
         self.humanoid = obUids[1]
