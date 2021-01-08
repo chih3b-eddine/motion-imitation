@@ -6,7 +6,7 @@ from motion_utils import compute_orientations, compute_positions
 
 
 data_folder = "data"
-input_file = "dance_vibe_output.pkl"
+input_file = "walking_vibe_output.pkl"
 
 # VIBE parameters
 FPS_VIBE = 30  # frames per second      
@@ -28,10 +28,10 @@ def process_poses(data, person_id=1):
         frame = frames[i]
         
         # compute orientations
-        root_orientation, angles = compute_orientations(poses[i])
+        root_orientation, angles, global_rotation = compute_orientations(poses[i])
         
         # compute positions
-        positions = compute_positions(joints3ds[i], root0, chest0)
+        positions = compute_positions(joints3ds[i], global_rotation, root0, chest0)
 
         # compute velocities
         if (i==0): 
