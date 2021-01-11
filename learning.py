@@ -174,7 +174,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if use_cuda else "cpu")
     print(f"running on {device}")
 
-    Pmodel = PNet(dim_state, dim_action, scale=0.01) # the scale should be small 
+    Pmodel = PNet(dim_state, dim_action, scale=0.05) # the scale should be small 
     if policy_path:
         policy_state_dict = torch.load(policy_path)
         Pmodel.load_state_dict(policy_state_dict)

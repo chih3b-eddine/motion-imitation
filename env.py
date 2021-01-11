@@ -67,7 +67,7 @@ class RLEnv:
         rightFootPosition, _, _, _, _, _ = pybullet.getLinkState(self.humanoid, self.terminalLinksIds[2])
         leftFootPosition, _, _, _, _, _ = pybullet.getLinkState(self.humanoid, self.terminalLinksIds[3])
         state = {
-            "isTerminal" : rootPosition[2]<0.4 or rootPosition[2]>5,
+            "isTerminal" : rootPosition[2]<0.3 or rootPosition[2]>5,
             "jointsAngles": [], 
             "jointsVelocities": [],
             "rootPosition": list(rootPosition),
@@ -85,7 +85,7 @@ class RLEnv:
 
     def compute_reward(self, state, reference_motion):
         if state["isTerminal"]:
-            return -1
+            return 0
         w_p = 0.65
         w_v = 0.1
         w_e = 0.15
