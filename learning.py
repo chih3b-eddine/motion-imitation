@@ -7,6 +7,12 @@ import random
 import numpy as np
 
 
+def append_to_file(data, path): 
+    with open(path, 'a') as outfile:
+        outfile.write(json.dumps(data))
+        outfile.write(",")
+        outfile.close() 
+
 def GAE(values, rewards, Gamma=0.95, Lambda=0.95):
     T = len(rewards)
     A = rewards[T-1] - values[T-1]
@@ -25,13 +31,11 @@ def test(reference_motion, n_episodes=10):
     rewards = []
     with torch.no_grad(): 
         for _ in range(n_episodes):
-            state = frames[0]
-            env.reset(state)
+            state = env.reset(frames[0])
             total_reward = 0
             for t in range(n_frames):
                 state = state_to_tensor(state)
                 policy = Pmodel(state)
-                value = Vmodel(state)
                 action = policy.sample()
                 next_state, reward = env.step(action.cpu().numpy()[0,:], frames[t])
                 total_reward += reward
@@ -48,7 +52,7 @@ def state_to_tensor(state):
     velocities = list(np.array(state["jointsVelocities"])[:,0])
     T = torch.FloatTensor([
         angles+velocities
-        +state["rootPosition"]+state["rootOrientation"]
+        +state["rootPosition"]+state["rootOrientation"]+state["rootLinearVelocity"]
         +state["leftHandPosition"]+state["rightHandPosition"]
         +state["leftFootPosition"]+state["rightFootPosition"]
     ]).to(device)
@@ -68,8 +72,7 @@ def train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=50
         rewards = []
         while len(values) < update_every:
             t0 = random.choice(range(n_frames//2))
-            state = frames[t0]
-            env.reset(state)
+            state = env.reset(frames[t0])
             for t in range(t0, min(t0 + n_steps, n_frames)):
                 state = state_to_tensor(state)
                 
@@ -106,6 +109,7 @@ def train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=50
         if episode % test_every == 0:
             avg_test_reward = test(reference_motion, test_episodes)
             print(f"episode {episode}, avg test reward {avg_test_reward}")
+            append_to_file(avg_test_reward, path="data/testrewards.txt")
             avg_test_reward = round(avg_test_reward, 2)
             if avg_test_reward > best_reward:
                 torch.save(Pmodel.state_dict(), f"data/policy_{avg_test_reward}_ep_{episode}.pth")
