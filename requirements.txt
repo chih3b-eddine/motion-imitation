@@ -2,5 +2,4 @@ pybullet
 numpy
 mathutils
 joblib
-pytorch
-youtube-dl
+torch
