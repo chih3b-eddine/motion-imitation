@@ -1,3 +1,6 @@
+# code from : bullet3 githhub repository
+# https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/humanoid_manual_control.py
+
 import pybullet as p
 import time
 
