@@ -37,6 +37,7 @@ def test(reference_motion, n_episodes=10):
                 state = state_to_tensor(state)
                 policy = Pmodel(state)
                 action = policy.sample()
+                action = normalize_action(action)
                 next_state, reward = env.step(action.cpu().numpy()[0,:], frames[t])
                 total_reward += reward
                 if next_state["isTerminal"]:
