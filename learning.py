@@ -141,10 +141,11 @@ def PPO(advantages_GAE, log_probs, values_TD, states, actions, minibatch_size=25
         new_lp = new_policies.log_prob(a)
         
         Poptimizer.zero_grad()
-        W = (new_lp - lp).exp()
-        term1 = W * A_GAE
-        term2 = torch.clamp(W, 1.0 - epsilon, 1.0 + epsilon) * A_GAE
-        policy_loss  = - torch.min(term1, term2).mean()
+        #W = (new_lp - lp).exp()
+        #term1 = W * A_GAE
+        #term2 = torch.clamp(W, 1.0 - epsilon, 1.0 + epsilon) * A_GAE
+        #policy_loss  = - torch.min(term1, term2).mean()
+        policy_loss  = - (new_lp * A_GAE).mean()
         policy_loss.backward()
         Poptimizer.step()
         
