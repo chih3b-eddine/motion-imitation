@@ -52,8 +52,8 @@ class RLEnv:
         return 2*len(self.jointIds) + 3*5 + 2 + 4
 
     def normalize_action(self, action):
-        s = action.sign()
-        r = action.abs() - (action.abs()//(2*np.pi))*2*np.pi
+        s = np.sign(action)
+        r = np.abs(action)  - (np.abs(action)//(2*np.pi))*2*np.pi
         r -= (r>np.pi)*2*np.pi
         return r*s
 
