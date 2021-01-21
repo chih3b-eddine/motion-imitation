@@ -37,7 +37,6 @@ def test(reference_motion, n_episodes=10):
                 state = state_to_tensor(state)
                 policy = Pmodel(state)
                 action = policy.sample()
-                action = normalize_action(action)
                 next_state, reward = env.step(action.cpu().numpy()[0,:], frames[t])
                 total_reward += reward
                 if next_state["isTerminal"]:
@@ -59,11 +58,7 @@ def state_to_tensor(state):
     ]).to(device)
     return T
 
-def normalize_action(action):
-    s = action.sign()
-    r = action.abs() - (action.abs()//(2*np.pi))*2*np.pi
-    r -= (r>np.pi)*2*np.pi
-    return r*s
+
 
 
 def train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=500, minibatch_size=256, update_every=4096, n_updates=20, epsilon=0.2, test_every=5, test_episodes=10):
@@ -87,7 +82,6 @@ def train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=50
                 value = Vmodel(state)
                 
                 action = policy.sample()
-                action = normalize_action(action)
                 next_state, reward = env.step(action.cpu().numpy()[0,:], frames[t])
                 log_prob = policy.log_prob(action)
                 

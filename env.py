@@ -51,7 +51,14 @@ class RLEnv:
     def dim_state(self):
         return 2*len(self.jointIds) + 3*5 + 2 + 4
 
+    def normalize_action(self, action):
+        s = action.sign()
+        r = action.abs() - (action.abs()//(2*np.pi))*2*np.pi
+        r -= (r>np.pi)*2*np.pi
+        return r*s
+
     def step(self, action, reference_motion):
+        action = self.normalize_action(action)
         pybullet.setJointMotorControlArray(self.humanoid, self.jointIds, pybullet.POSITION_CONTROL, action)
         pybullet.stepSimulation()
         next_state = self.get_state()
