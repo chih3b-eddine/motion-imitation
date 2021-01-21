@@ -90,6 +90,7 @@ def train(reference_motion, Gamma=0.95, Lambda=0.95, n_episodes=1000, n_steps=50
                 states.append(state)
                 actions.append(action)
                 rewards.append(torch.FloatTensor([reward]).to(device))
+                append_to_file(reward, path="data/allrewards.txt")
         
                 if next_state["isTerminal"]:
                     break
